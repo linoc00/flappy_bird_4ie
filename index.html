@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Flappy Bird - Three.js</title>
+    <!-- Tailwind CSS for UI Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Inter:wght@400;600;800&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden;
+            background-color: #0b0f19;
+        }
+
+        .font-game {
+            font-family: 'Fredoka One', cursive, sans-serif;
+        }
+
+        /* Subtle overlay glow */
+        .vignette {
+            box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.4);
+        }
+
+        /* Dynamic screen shake container */
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            overflow: hidden;
+        }
+
+        .shake {
+            animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-2px, 1px, 0); }
+            20%, 80% { transform: translate3d(4px, -2px, 0); }
+            30%, 50%, 70% { transform: translate3d(-6px, 4px, 0); }
+            40%, 60% { transform: translate3d(6px, -4px, 0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-white w-screen h-screen m-0 p-0 overflow-hidden">
+
+    <!-- Primary Canvas Container -->
+    <div id="game-container" class="vignette">
+        <canvas id="webgl-canvas" class="w-full h-full block"></canvas>
+    </div>
+
+    <!-- UI Overlay Layer -->
+    <div id="ui-layer" class="absolute inset-0 pointer-events-none flex flex-col justify-between p-6 z-10">
+        
+        <!-- Header HUD -->
+        <div class="flex justify-between items-start w-full max-w-4xl mx-auto">
+            <div class="bg-slate-900/80 backdrop-blur-md px-5 py-3 rounded-2xl border border-slate-700/50 shadow-lg">
+                <span class="text-xs uppercase tracking-wider font-semibold text-slate-400 block">Punteggio</span>
+                <span id="score-display" class="font-game text-4xl text-amber-400 tracking-wide">0</span>
+            </div>
+            
+            <div class="bg-slate-900/80 backdrop-blur-md px-5 py-3 rounded-2xl border border-slate-700/50 shadow-lg text-right">
+                <span class="text-xs uppercase tracking-wider font-semibold text-slate-400 block">Record</span>
+                <span id="highscore-display" class="font-game text-4xl text-emerald-400 tracking-wide">0</span>
+            </div>
+        </div>
+
+        <!-- Start Screen Modal -->
+        <div id="start-screen" class="pointer-events-auto my-auto self-center bg-slate-900/90 backdrop-blur-xl border border-slate-700/60 p-8 rounded-3xl max-w-md w-full text-center shadow-2xl transition-all duration-300">
+            <div class="w-16 h-16 bg-amber-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-500/30">
+                <svg class="w-8 h-8 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                </svg>
+            </div>
+            <h1 class="font-game text-4xl mb-2 text-white tracking-wide">3D FLAPPY BIRD</h1>
+            <p class="text-slate-300 text-sm mb-6 leading-relaxed">
+                Premi <kbd class="px-2 py-1 bg-slate-800 rounded border border-slate-600 text-amber-400 font-mono">SPAZIO</kbd> o fai un <kbd class="px-2 py-1 bg-slate-800 rounded border border-slate-600 text-amber-400">CLICK</kbd> per saltare ed evitare gli ostacoli.
+            </p>
+            <button id="start-btn" class="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-game text-xl rounded-2xl shadow-lg shadow-orange-500/25 transition transform active:scale-95 cursor-pointer">
+                GIOCA ORA
+            </button>
+        </div>
+
+        <!-- Game Over Screen Modal -->
+        <div id="gameover-screen" class="hidden pointer-events-auto my-auto self-center bg-slate-900/90 backdrop-blur-xl border border-slate-700/60 p-8 rounded-3xl max-w-md w-full text-center shadow-2xl transition-all duration-300">
+            <h2 class="font-game text-4xl text-rose-500 mb-1 tracking-wide">GAME OVER</h2>
+            <p class="text-slate-400 text-xs uppercase tracking-widest mb-6">Hai urtato un ostacolo!</p>
+            
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-slate-800/60 p-4 rounded-2xl border border-slate-700/40">
+                    <span class="text-xs text-slate-400 block mb-1">Punteggio Finale</span>
+                    <span id="final-score" class="font-game text-3xl text-amber-400">0</span>
+                </div>
+                <div class="bg-slate-800/60 p-4 rounded-2xl border border-slate-700/40">
+                    <span class="text-xs text-slate-400 block mb-1">Miglior Record</span>
+                    <span id="final-highscore" class="font-game text-3xl text-emerald-400">0</span>
+                </div>
+            </div>
+
+            <button id="restart-btn" class="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-game text-xl rounded-2xl shadow-lg shadow-teal-500/25 transition transform active:scale-95 cursor-pointer">
+                RIPARTI
+            </button>
+        </div>
+
+        <!-- Footer Control Hint -->
+        <div class="w-full text-center text-slate-500 text-xs font-medium">
+            Engine: Three.js WebGL • Audio: Web Audio Synth API
+        </div>
+    </div>
+
+    <!-- Three.js ES Import -->
+    <script type="module">
+        import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js';
+
+        // ==========================================
+        // 1. AUDIO SYNTHESIZER SYSTEM (Web Audio API)
+        // ==========================================
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playJump() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(320, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(680, this.ctx.currentTime + 0.12);
+
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.12);
+            }
+
+            playScore() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                
+                const osc1 = this.ctx.createOscillator();
+                const osc2 = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc1.type = 'triangle';
+                osc2.type = 'triangle';
+
+                osc1.frequency.setValueAtTime(523.25, now); // C5
+                osc1.frequency.setValueAtTime(659.25, now + 0.08); // E5
+                
+                osc2.frequency.setValueAtTime(1046.50, now + 0.08); // C6
+
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+
+                osc1.connect(gain);
+                osc2.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc1.start(now);
+                osc2.start(now + 0.08);
+                osc1.stop(now + 0.25);
+                osc2.stop(now + 0.25);
+            }
+
+            playCrash() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                
+                // Noise buffer generation for impact explosion
+                const bufferSize = this.ctx.sampleRate * 0.2;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(800, now);
+                filter.frequency.exponentialRampToValueAtTime(40, now + 0.2);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.6, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                noise.start(now);
+                noise.stop(now + 0.2);
+            }
+        }
+
+        // ==========================================
+        // 2. CONFIG & GAME CONSTANTS
+        // ==========================================
+        const CONFIG = {
+            gravity: -28.0,
+            jumpImpulse: 9.5,
+            terminalVelocity: -16.0,
+            pipeSpeed: 8.5,
+            pipeSpawnInterval: 1.8,
+            pipeGap: 4.8,
+            pipeMinY: -3.5,
+            pipeMaxY: 3.5,
+            birdRadius: 0.55,
+            boundY: 9.0
+        };
+
+        const STATES = { START: 0, PLAYING: 1, GAME_OVER: 2 };
+
+        // ==========================================
+        // 3. GAME ENGINE CLASS
+        // ==========================================
+        class GameEngine {
+            constructor() {
+                this.state = STATES.START;
+                this.score = 0;
+                this.highScore = parseInt(localStorage.getItem('fb3d_highscore') || '0', 10);
+                
+                this.sound = new SoundEngine();
+
+                this.pipes = [];
+                this.clouds = [];
+                this.particles = [];
+                this.spawnTimer = 0;
+
+                // Physics state
+                this.birdPos = new THREE.Vector3(0, 0, 0);
+                this.birdVelocityY = 0;
+                this.birdRotationZ = 0;
+
+                this.initDOM();
+                this.initThree();
+                this.buildWorld();
+                this.bindEvents();
+
+                this.clock = new THREE.Clock();
+                this.animate = this.animate.bind(this);
+                requestAnimationFrame(this.animate);
+            }
+
+            initDOM() {
+                this.container = document.getElementById('game-container');
+                this.canvas = document.getElementById('webgl-canvas');
+                this.scoreElem = document.getElementById('score-display');
+                this.highScoreElem = document.getElementById('highscore-display');
+                this.finalScoreElem = document.getElementById('final-score');
+                this.finalHighScoreElem = document.getElementById('final-highscore');
+                this.startScreen = document.getElementById('start-screen');
+                this.gameOverScreen = document.getElementById('gameover-screen');
+
+                this.highScoreElem.textContent = this.highScore;
+            }
+
+            initThree() {
+                // Scene setup
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x6ebccb);
+                this.scene.fog = new THREE.FogExp2(0x6ebccb, 0.025);
+
+                // Camera setup
+                this.camera = new THREE.PerspectiveCamera(
+                    55,
+                    window.innerWidth / window.innerHeight,
+                    0.1,
+                    1000
+                );
+                this.camera.position.set(0, 0, 14);
+                this.camera.lookAt(2, 0, 0);
+
+                // Renderer setup
+                this.renderer = new THREE.WebGLRenderer({
+                    canvas: this.canvas,
+                    antialias: true,
+                    powerPreference: "high-performance"
+                });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+                // Dynamic Lighting Setup
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+                this.scene.add(ambientLight);
+
+                const dirLight = new THREE.DirectionalLight(0xfffaed, 1.2);
+                dirLight.position.set(10, 20, 15);
+                dirLight.castShadow = true;
+                dirLight.shadow.mapSize.width = 1024;
+                dirLight.shadow.mapSize.height = 1024;
+                dirLight.shadow.camera.near = 0.5;
+                dirLight.shadow.camera.far = 40;
+                dirLight.shadow.camera.left = -12;
+                dirLight.shadow.camera.right = 12;
+                dirLight.shadow.camera.top = 12;
+                dirLight.shadow.camera.bottom = -12;
+                this.scene.add(dirLight);
+
+                const fillLight = new THREE.DirectionalLight(0x90e0ef, 0.4);
+                fillLight.position.set(-10, -10, -10);
+                this.scene.add(fillLight);
+            }
+
+            buildWorld() {
+                // Ground creation with procedural texture striping
+                const groundGeo = new THREE.BoxGeometry(200, 10, 10);
+                const groundMat = new THREE.MeshStandardMaterial({
+                    color: 0x2e8b57,
+                    roughness: 0.8,
+                    metalness: 0.1
+                });
+                this.ground = new THREE.Mesh(groundGeo, groundMat);
+                this.ground.position.set(0, -10, 0);
+                this.ground.receiveShadow = true;
+                this.scene.add(this.ground);
+
+                // Decorative grass layer
+                const grassGeo = new THREE.BoxGeometry(200, 0.5, 10);
+                const grassMat = new THREE.MeshStandardMaterial({ color: 0x47cd73, roughness: 0.6 });
+                const grass = new THREE.Mesh(grassGeo, grassMat);
+                grass.position.set(0, -4.75, 0);
+                grass.receiveShadow = true;
+                this.scene.add(grass);
+
+                // Background Low-Poly Mountains
+                this.buildMountains();
+
+                // Stylized Bird Construction
+                this.birdGroup = new THREE.Group();
+
+                // Body
+                const bodyGeo = new THREE.SphereGeometry(CONFIG.birdRadius, 16, 16);
+                bodyGeo.scale(1.2, 1.0, 1.0);
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3, metalness: 0.1 });
+                this.birdBody = new THREE.Mesh(bodyGeo, bodyMat);
+                this.birdBody.castShadow = true;
+                this.birdGroup.add(this.birdBody);
+
+                // Eye White
+                const eyeGeo = new THREE.SphereGeometry(0.18, 12, 12);
+                const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                const eyeRight = new THREE.Mesh(eyeGeo, eyeMat);
+                eyeRight.position.set(0.35, 0.25, 0.35);
+                this.birdGroup.add(eyeRight);
+
+                // Pupil
+                const pupilGeo = new THREE.SphereGeometry(0.08, 8, 8);
+                const pupilMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+                const pupilRight = new THREE.Mesh(pupilGeo, pupilMat);
+                pupilRight.position.set(0.48, 0.27, 0.42);
+                this.birdGroup.add(pupilRight);
+
+                // Beak
+                const beakGeo = new THREE.ConeGeometry(0.25, 0.5, 8);
+                beakGeo.rotateZ(-Math.PI / 2);
+                const beakMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.5 });
+                const beak = new THREE.Mesh(beakGeo, beakMat);
+                beak.position.set(0.75, 0.05, 0);
+                beak.castShadow = true;
+                this.birdGroup.add(beak);
+
+                // Wings
+                const wingGeo = new THREE.BoxGeometry(0.5, 0.08, 0.6);
+                const wingMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.4 });
+                
+                this.leftWing = new THREE.Mesh(wingGeo, wingMat);
+                this.leftWing.position.set(-0.1, 0.0, 0.5);
+                this.leftWing.geometry.translate(0, 0, 0.3);
+                this.birdGroup.add(this.leftWing);
+
+                this.rightWing = new THREE.Mesh(wingGeo, wingMat);
+                this.rightWing.position.set(-0.1, 0.0, -0.5);
+                this.rightWing.geometry.translate(0, 0, -0.3);
+                this.birdGroup.add(this.rightWing);
+
+                this.scene.add(this.birdGroup);
+
+                // Spawn initial floating background clouds
+                for (let i = 0; i < 8; i++) {
+                    this.spawnCloud(Math.random() * 60 - 20);
+                }
+            }
+
+            buildMountains() {
+                const mountainGroup = new THREE.Group();
+                const mat = new THREE.MeshStandardMaterial({ color: 0x52b788, roughness: 0.9, flatShading: true });
+                
+                for (let i = 0; i < 10; i++) {
+                    const radius = 4 + Math.random() * 6;
+                    const height = 8 + Math.random() * 10;
+                    const geo = new THREE.ConeGeometry(radius, height, 5);
+                    const mesh = new THREE.Mesh(geo, mat);
+                    mesh.position.set(-30 + i * 9, -5 + height / 2, -12 - Math.random() * 5);
+                    mountainGroup.add(mesh);
+                }
+                this.scene.add(mountainGroup);
+            }
+
+            spawnCloud(startX = 30) {
+                const cloudGroup = new THREE.Group();
+                const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1.0, flatShading: true, transparent: true, opacity: 0.85 });
+                
+                const count = 3 + Math.floor(Math.random() * 3);
+                for (let i = 0; i < count; i++) {
+                    const radius = 1 + Math.random() * 1.2;
+                    const geo = new THREE.DodecahedronGeometry(radius, 1);
+                    const mesh = new THREE.Mesh(geo, mat);
+                    mesh.position.set(i * 1.2, Math.random() * 0.5, Math.random() * 0.5);
+                    cloudGroup.add(mesh);
+                }
+
+                const posY = 3 + Math.random() * 6;
+                const posZ = -6 - Math.random() * 6;
+                const speed = 1.0 + Math.random() * 1.5;
+
+                cloudGroup.position.set(startX, posY, posZ);
+                this.scene.add(cloudGroup);
+                this.clouds.push({ mesh: cloudGroup, speed: speed });
+            }
+
+            createPipePair() {
+                const gapY = THREE.MathUtils.lerp(CONFIG.pipeMinY, CONFIG.pipeMaxY, Math.random());
+                const pipeGroup = new THREE.Group();
+
+                const pipeRadius = 1.1;
+                const capHeight = 0.6;
+                const capRadius = 1.25;
+
+                const pipeMat = new THREE.MeshStandardMaterial({
+                    color: 0x22c55e,
+                    roughness: 0.3,
+                    metalness: 0.2
+                });
+
+                // Top Pipe calculations
+                const topPipeHeight = 20;
+                const topPipeGeo = new THREE.CylinderGeometry(pipeRadius, pipeRadius, topPipeHeight, 16);
+                const topPipe = new THREE.Mesh(topPipeGeo, pipeMat);
+                topPipe.position.set(0, gapY + CONFIG.pipeGap / 2 + topPipeHeight / 2, 0);
+                topPipe.castShadow = true;
+                topPipe.receiveShadow = true;
+                pipeGroup.add(topPipe);
+
+                const topCapGeo = new THREE.CylinderGeometry(capRadius, capRadius, capHeight, 16);
+                const topCap = new THREE.Mesh(topCapGeo, pipeMat);
+                topCap.position.set(0, gapY + CONFIG.pipeGap / 2 + capHeight / 2, 0);
+                topCap.castShadow = true;
+                pipeGroup.add(topCap);
+
+                // Bottom Pipe calculations
+                const bottomPipeHeight = 20;
+                const bottomPipeGeo = new THREE.CylinderGeometry(pipeRadius, pipeRadius, bottomPipeHeight, 16);
+                const bottomPipe = new THREE.Mesh(bottomPipeGeo, pipeMat);
+                bottomPipe.position.set(0, gapY - CONFIG.pipeGap / 2 - bottomPipeHeight / 2, 0);
+                bottomPipe.castShadow = true;
+                bottomPipe.receiveShadow = true;
+                pipeGroup.add(bottomPipe);
+
+                const bottomCapGeo = new THREE.CylinderGeometry(capRadius, capRadius, capHeight, 16);
+                const bottomCap = new THREE.Mesh(bottomCapGeo, pipeMat);
+                bottomCap.position.set(0, gapY - CONFIG.pipeGap / 2 - capHeight / 2, 0);
+                bottomCap.castShadow = true;
+                pipeGroup.add(bottomCap);
+
+                pipeGroup.position.x = 22;
+                this.scene.add(pipeGroup);
+
+                this.pipes.push({
+                    group: pipeGroup,
+                    passed: false,
+                    gapY: gapY,
+                    topCapY: gapY + CONFIG.pipeGap / 2,
+                    bottomCapY: gapY - CONFIG.pipeGap / 2,
+                    radius: capRadius
+                });
+            }
+
+            createJumpBurst() {
+                const particleCount = 8;
+                const geo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+                const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+                for (let i = 0; i < particleCount; i++) {
+                    const p = new THREE.Mesh(geo, mat);
+                    p.position.copy(this.birdGroup.position);
+                    p.position.x -= 0.3;
+                    
+                    const vel = new THREE.Vector3(
+                        (Math.random() - 0.8) * 3,
+                        (Math.random() - 0.5) * 3,
+                        (Math.random() - 0.5) * 3
+                    );
+
+                    this.scene.add(p);
+                    this.particles.push({ mesh: p, vel: vel, life: 1.0 });
+                }
+            }
+
+            triggerJump() {
+                if (this.state === STATES.START) {
+                    this.startGame();
+                }
+
+                if (this.state === STATES.PLAYING) {
+                    this.sound.init();
+                    this.birdVelocityY = CONFIG.jumpImpulse;
+                    this.sound.playJump();
+                    this.createJumpBurst();
+                }
+            }
+
+            startGame() {
+                this.state = STATES.PLAYING;
+                this.score = 0;
+                this.scoreElem.textContent = '0';
+                this.startScreen.classList.add('hidden');
+                this.gameOverScreen.classList.add('hidden');
+                
+                // Clear existing obstacles
+                this.pipes.forEach(p => this.scene.remove(p.group));
+                this.pipes = [];
+
+                // Reset bird parameters
+                this.birdPos.set(0, 0, 0);
+                this.birdGroup.position.copy(this.birdPos);
+                this.birdVelocityY = CONFIG.jumpImpulse * 0.7;
+                this.spawnTimer = 0;
+            }
+
+            gameOver() {
+                this.state = STATES.GAME_OVER;
+                this.sound.playCrash();
+
+                // Screen Shake FX
+                this.container.classList.add('shake');
+                setTimeout(() => this.container.classList.remove('shake'), 400);
+
+                if (this.score > this.highScore) {
+                    this.highScore = this.score;
+                    localStorage.setItem('fb3d_highscore', this.highScore.toString());
+                    this.highScoreElem.textContent = this.highScore;
+                }
+
+                this.finalScoreElem.textContent = this.score;
+                this.finalHighScoreElem.textContent = this.highScore;
+
+                setTimeout(() => {
+                    this.gameOverScreen.classList.remove('hidden');
+                }, 300);
+            }
+
+            bindEvents() {
+                // Key bindings
+                window.addEventListener('keydown', (e) => {
+                    if (e.code === 'Space' || e.code === 'ArrowUp') {
+                        e.preventDefault();
+                        this.triggerJump();
+                    }
+                });
+
+                // Touch & Mouse bindings
+                window.addEventListener('pointerdown', (e) => {
+                    if (e.target.tagName !== 'BUTTON') {
+                        this.triggerJump();
+                    }
+                });
+
+                // UI Button bindings
+                document.getElementById('start-btn').addEventListener('click', () => this.startGame());
+                document.getElementById('restart-btn').addEventListener('click', () => this.startGame());
+
+                // Window Resize Handler
+                window.addEventListener('resize', () => this.onWindowResize());
+            }
+
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            // Collision Detection Logic (Sphere vs Cylinder AABB simplified)
+            checkCollisions() {
+                const birdX = this.birdGroup.position.x;
+                const birdY = this.birdGroup.position.y;
+
+                // 1. Ground & Ceiling Collisions
+                if (birdY - CONFIG.birdRadius <= -4.5 || birdY + CONFIG.birdRadius >= CONFIG.boundY) {
+                    return true;
+                }
+
+                // 2. Pipe Collisions
+                for (let i = 0; i < this.pipes.length; i++) {
+                    const pipe = this.pipes[i];
+                    const pipeX = pipe.group.position.x;
+
+                    // Horizontal bounds check
+                    if (Math.abs(birdX - pipeX) < (CONFIG.birdRadius + pipe.radius)) {
+                        // Vertical bounds check (inside top or bottom pipe)
+                        if (birdY + CONFIG.birdRadius * 0.7 > pipe.topCapY || 
+                            birdY - CONFIG.birdRadius * 0.7 < pipe.bottomCapY) {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            }
+
+            // Main Update Loop
+            update(dt) {
+                // Clamp delta time for frame drops
+                const delta = Math.min(dt, 0.05);
+
+                // Wing flapping animation dynamic calculation
+                const flapSpeed = this.state === STATES.PLAYING ? 18 : 6;
+                const wingAngle = Math.sin(this.clock.getElapsedTime() * flapSpeed) * 0.6;
+                this.leftWing.rotation.x = wingAngle;
+                this.rightWing.rotation.x = -wingAngle;
+
+                // Environment updates (Clouds movement)
+                for (let i = this.clouds.length - 1; i >= 0; i--) {
+                    const c = this.clouds[i];
+                    c.mesh.position.x -= c.speed * delta;
+                    if (c.mesh.position.x < -35) {
+                        this.scene.remove(c.mesh);
+                        this.clouds.splice(i, 1);
+                        this.spawnCloud(35);
+                    }
+                }
+
+                // Particles update
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    const p = this.particles[i];
+                    p.life -= delta * 2.5;
+                    p.mesh.position.addScaledVector(p.vel, delta);
+                    p.mesh.scale.setScalar(p.life);
+
+                    if (p.life <= 0) {
+                        this.scene.remove(p.mesh);
+                        this.particles.splice(i, 1);
+                    }
+                }
+
+                // Hover state on Start Screen
+                if (this.state === STATES.START) {
+                    this.birdPos.y = Math.sin(this.clock.getElapsedTime() * 3) * 0.4;
+                    this.birdGroup.position.y = this.birdPos.y;
+                    this.birdGroup.rotation.z = 0;
+                    return;
+                }
+
+                if (this.state === STATES.PLAYING) {
+                    // Apply Physics
+                    this.birdVelocityY += CONFIG.gravity * delta;
+                    if (this.birdVelocityY < CONFIG.terminalVelocity) {
+                        this.birdVelocityY = CONFIG.terminalVelocity;
+                    }
+
+                    this.birdPos.y += this.birdVelocityY * delta;
+                    this.birdGroup.position.y = this.birdPos.y;
+
+                    // Pitch Rotation smoothing based on vertical speed
+                    const targetRotation = Math.max(-Math.PI / 2.8, Math.min(Math.PI / 4, this.birdVelocityY * 0.08));
+                    this.birdRotationZ += (targetRotation - this.birdRotationZ) * 12 * delta;
+                    this.birdGroup.rotation.z = this.birdRotationZ;
+
+                    // Obstacle Spawning
+                    this.spawnTimer += delta;
+                    if (this.spawnTimer >= CONFIG.pipeSpawnInterval) {
+                        this.createPipePair();
+                        this.spawnTimer = 0;
+                    }
+
+                    // Move & Process Pipes
+                    for (let i = this.pipes.length - 1; i >= 0; i--) {
+                        const pipe = this.pipes[i];
+                        pipe.group.position.x -= CONFIG.pipeSpeed * delta;
+
+                        // Check Score Point
+                        if (!pipe.passed && pipe.group.position.x < this.birdPos.x) {
+                            pipe.passed = true;
+                            this.score++;
+                            this.scoreElem.textContent = this.score;
+                            this.sound.playScore();
+                        }
+
+                        // Remove Offscreen Pipes
+                        if (pipe.group.position.x < -20) {
+                            this.scene.remove(pipe.group);
+                            this.pipes.splice(i, 1);
+                        }
+                    }
+
+                    // Collision Check
+                    if (this.checkCollisions()) {
+                        this.gameOver();
+                    }
+                }
+            }
+
+            animate() {
+                requestAnimationFrame(this.animate);
+                const dt = this.clock.getDelta();
+                this.update(dt);
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        // Initialize Engine on Window Load
+        window.addEventListener('load', () => {
+            new GameEngine();
+        });
+    </script>
+</body>
+</html>
